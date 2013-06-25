@@ -28,10 +28,43 @@ class BeanstalkTopUI(object):
 
         self._connection = None
 
+        self.default_overview = dict(
+            (i, '-') for i in (
+                'pid',
+                'total-jobs',
+                'current-connections',
+                'current-producers',
+                'current-workers',
+                'current-tubes',
+                'current-jobs-ready',
+                'current-jobs-urgent',
+                'current-jobs-buried',
+                'current-jobs-reserved'
+                ))
+
+        self.default_row = dict(
+            (i, '-') for i in (
+                'current-jobs-buried',
+                'current-jobs-delayed',
+                'current-jobs-ready',
+                'current-jobs-reserved',
+                'current-jobs-urgent'
+                ))
+
+        self.default_row.update({'name': 'default'})
+
 
     def _get_connection(self):
+        return beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
         if not self._connection:
-            self._connection = beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
+            try:
+                self._connection = beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
+            except beanstalkc.SocketError:
+                self.win.erase()
+                raise SystemExit('Host {} not contactable on port {}'.format(
+                    self.options.host,
+                    self.options.port
+                    ))
         return self._connection
 
     connection = property(_get_connection)
@@ -57,6 +90,8 @@ class BeanstalkTopUI(object):
                     events = 0
                 else:
                     raise
+            except KeyboardInterrupt:
+                break
 
             if events:
                 key = self.win.getch()
@@ -91,7 +126,10 @@ class BeanstalkTopUI(object):
 
         overview, lines = self.get_data()
 
-        overview['uptime'] = self._format_uptime(overview['uptime'])
+        try:
+            overview['uptime'] = self._format_uptime(overview.get('uptime', 0))
+        except:
+            overview['uptime'] = self._format_uptime(0)
 
         summary_items = [item.format(**overview) for item in (
             'PID: {pid}',
@@ -242,7 +280,10 @@ class BeanstalkTopUI(object):
         'total-jobs': 2579,
         }
         """
-        return self.connection.stats(), [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
+        try:
+            return self.connection.stats(), [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
+        except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed) as e:
+            return self.default_overview, [self.default_row]
 
 
 
