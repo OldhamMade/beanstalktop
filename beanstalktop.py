@@ -7,8 +7,6 @@ import sys
 import errno
 import beanstalkc
 
-from __version__ import *
-
 
 class BeanstalkTopUI(object):
 
