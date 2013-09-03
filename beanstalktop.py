@@ -4,14 +4,11 @@ import curses
 import optparse
 import select
 import sys
-import optparse
-import os
 import errno
 import beanstalkc
 
-__version__ = "0.0.1"
-__author__ = 'Phillip B Oldham'
-__licence__ = 'MIT'
+from __version__ import *
+
 
 class BeanstalkTopUI(object):
 
@@ -78,7 +75,7 @@ class BeanstalkTopUI(object):
 
     def run(self):
         poll = select.poll()
-        poll.register(sys.stdin.fileno(), select.POLLIN|select.POLLPRI)
+        poll.register(sys.stdin.fileno(), select.POLLIN | select.POLLPRI)
         while 1:
             self.resize()
             self.refresh_display()
@@ -157,21 +154,21 @@ class BeanstalkTopUI(object):
 
         self.win.addstr(' ' * self.width)
 
-        colwidth = self.width / len(titles)+1
+        colwidth = self.width / len(titles) + 1
 
         titlelen = 0
         for i in range(len(titles)):
             attr = curses.A_REVERSE
 
             if i is 0:
-                title = (' ' + titles[i]).ljust(colwidth-1)
+                title = (' ' + titles[i]).ljust(colwidth - 1)
             else:
-                title = (titles[i] + ' ').rjust(colwidth-1)
+                title = (titles[i] + ' ').rjust(colwidth - 1)
 
             titlelen += len(title)
             self.win.addstr(title, attr)
 
-        self.win.addstr(' '*(self.width - titlelen), curses.A_REVERSE)
+        self.win.addstr(' ' * (self.width - titlelen), curses.A_REVERSE)
 
         columns = (
             'name',
@@ -195,9 +192,9 @@ class BeanstalkTopUI(object):
             for c, column in enumerate(columns):
                 try:
                     if c is 0:
-                        row += (' ' + str(line[column])).ljust(colwidth-1)
+                        row += (' ' + str(line[column])).ljust(colwidth - 1)
                     else:
-                        row += (str(line[column]) + ' ').rjust(colwidth-1)
+                        row += (str(line[column]) + ' ').rjust(colwidth - 1)
 
                 except curses.error:
                     pass
@@ -282,7 +279,7 @@ class BeanstalkTopUI(object):
         """
         try:
             return self.connection.stats(), [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
-        except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed) as e:
+        except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed):
             return self.default_overview, [self.default_row]
 
 
