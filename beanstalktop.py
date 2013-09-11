@@ -56,7 +56,7 @@ class BeanstalkTopUI(object):
                 self._connection = beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
             except beanstalkc.SocketError:
                 self.win.erase()
-                raise SystemExit('Host {} not contactable on port {}'.format(
+                raise SystemExit('Host {0} not contactable on port {1}'.format(
                     self.options.host,
                     self.options.port
                     ))
@@ -68,7 +68,7 @@ class BeanstalkTopUI(object):
     def _format_uptime(self, seconds):
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        return '{}h {}m {}s'.format(hours, minutes, seconds)
+        return '{0}h {1}m {2}s'.format(hours, minutes, seconds)
 
 
     def run(self):
