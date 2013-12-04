@@ -10,6 +10,10 @@ import beanstalkc
 
 class BeanstalkTopUI(object):
 
+    # sort order
+    ASCENDING = 1
+    DESCENDING = -1
+
     def __init__(self, win, options):
         self.win = win
         self.options = options
@@ -119,7 +123,8 @@ class BeanstalkTopUI(object):
             'BURIED',
             )
 
-        overview, lines = self.get_data()
+        overview = self.get_overview_data()
+        lines = self.get_tube_data(key='name', sort=self.ASCENDING)
 
         try:
             overview['uptime'] = self._format_uptime(overview.get('uptime', 0))
@@ -179,25 +184,30 @@ class BeanstalkTopUI(object):
 
         max_lines = self.height - (len(summary_lines) + 1)
 
-        sortedlines = sorted(lines, key=lambda x: x['current-jobs-ready'])[::-1]
+        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK)
 
         for i in range(max_lines):
             try:
-                line = sortedlines[i]
+                line = lines[i]
             except IndexError:
                 break
             row = ''
+            jobs = 0
             for c, column in enumerate(columns):
                 try:
                     if c is 0:
                         row += (' ' + str(line[column])).ljust(colwidth - 1)
                     else:
                         row += (str(line[column]) + ' ').rjust(colwidth - 1)
-
+                        jobs += int(line[column])
                 except curses.error:
                     pass
             try:
-                self.win.addstr(row.ljust(self.width))
+                if jobs:
+                    self.win.addstr(row.ljust(self.width), curses.color_pair(2)|curses.A_BOLD)
+                else:
+                    self.win.addstr(row.ljust(self.width), curses.color_pair(1))
             except curses.error:
                 pass
 
@@ -205,7 +215,7 @@ class BeanstalkTopUI(object):
         self.win.refresh()
 
 
-    def get_data(self):
+    def get_overview_data(self):
         """
         Main statistics
         {
@@ -256,7 +266,32 @@ class BeanstalkTopUI(object):
         'uptime': 156,
         'version': 1.6,
         }
+        """
+        try:
+            return self.connection.stats()
+        except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed):
+            return self.default_overview
 
+    _tube_sort_keys = (
+        'cmd-delete',
+        'cmd-pause-tube',
+        'current-jobs-buried',
+        'current-jobs-delayed',
+        'current-jobs-ready',
+        'current-jobs-reserved',
+        'current-jobs-urgent',
+        'current-using',
+        'current-waiting',
+        'current-watching',
+        'name',
+        'pause',
+        'pause-time-left',
+        'total-jobs',
+        )
+
+
+    def get_tube_data(self, key='name', sort=1):
+        """
         Tube-specific statistics
         {
         'cmd-delete': 892,
@@ -276,9 +311,18 @@ class BeanstalkTopUI(object):
         }
         """
         try:
-            return self.connection.stats(), [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
+            if key not in self._tube_sort_keys:
+                key = 'name'
+
+            lines = [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
+
+            if sort == self.DESCENDING:
+                return reversed(sorted(lines, key=lambda x: x[key]))
+            else:
+                return sorted(lines, key=lambda x: x[key])
+
         except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed):
-            return self.default_overview, [self.default_row]
+            return [self.default_row]
 
 
 
