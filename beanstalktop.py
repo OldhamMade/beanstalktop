@@ -7,12 +7,32 @@ import sys
 import errno
 import beanstalkc
 
+from operator import itemgetter
 
 class BeanstalkTopUI(object):
 
     # sort order
     ASCENDING = 1
     DESCENDING = -1
+
+    titles = (
+        'TUBE',
+        'READY',
+        'URGENT',
+        'RESRVD',
+        'DELAYD',
+        'BURIED',
+        )
+
+    columns = (
+        'name',
+        'current-jobs-ready',
+        'current-jobs-urgent',
+        'current-jobs-reserved',
+        'current-jobs-delayed',
+        'current-jobs-buried',
+        )
+
 
     def __init__(self, win, options):
         self.win = win
@@ -52,19 +72,15 @@ class BeanstalkTopUI(object):
 
         self.default_row.update({'name': 'default'})
 
+        if curses.has_colors():
+            curses.init_pair(1, 255, -1)  # WHITE
+            curses.init_pair(2, 245, -1)  # GREY
+            curses.init_pair(3, 160, -1)  # RED
+
 
     def _get_connection(self):
-        return beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
-        if not self._connection:
-            try:
-                self._connection = beanstalkc.Connection(host=self.options.host, port=int(self.options.port))
-            except beanstalkc.SocketError:
-                self.win.erase()
-                raise SystemExit('Host {0} not contactable on port {1}'.format(
-                    self.options.host,
-                    self.options.port
-                    ))
-        return self._connection
+        return beanstalkc.Connection(host=self.options.host,
+                                     port=int(self.options.port))
 
     connection = property(_get_connection)
 
@@ -78,6 +94,7 @@ class BeanstalkTopUI(object):
     def run(self):
         poll = select.poll()
         poll.register(sys.stdin.fileno(), select.POLLIN | select.POLLPRI)
+
         while 1:
             self.resize()
             self.refresh_display()
@@ -114,17 +131,29 @@ class BeanstalkTopUI(object):
     def refresh_display(self):
         self.win.erase()
 
-        titles = (
-            'TUBE',
-            'READY',
-            'URGENT',
-            'RESRVD',
-            'DELAYD',
-            'BURIED',
-            )
+        colwidth = self.width / len(self.titles) + 1
 
-        overview = self.get_overview_data()
+        summary_line_height = self.display_header(colwidth)
+        title_line_height = self.display_titles(colwidth)
+        footer_line_height = self.display_footer(colwidth)
+
         lines = self.get_tube_data(key='name', sort=self.ASCENDING)
+
+        max_display_lines = self.height - (summary_line_height +
+                                           title_line_height +
+                                           footer_line_height)
+
+        for i in range(max_display_lines):
+            try:
+                self.display_line(lines[i], colwidth)
+            except IndexError:
+                break
+
+        self.win.refresh()
+
+
+    def display_header(self, colwidth):
+        overview = self.get_overview_data()
 
         try:
             overview['uptime'] = self._format_uptime(overview.get('uptime', 0))
@@ -132,21 +161,25 @@ class BeanstalkTopUI(object):
             overview['uptime'] = self._format_uptime(0)
 
         summary_items = [item.format(**overview) for item in (
-            'PID: {pid}',
-            'Uptime: {uptime}',
-            'Total Jobs: {total-jobs}',
-            'Connections: {current-connections} ({current-producers}:{current-workers})',
-            'Cur. Tubes: {current-tubes}',
-            'Cur. Ready: {current-jobs-ready}',
+            # Row 1
+            'Cur. Resvd: {current-jobs-reserved}',
             'Cur. Urgent: {current-jobs-urgent}',
+            ('Cnx\'s: {current-connections} '
+             '({current-producers}:{current-workers})'),
+            # Row 2
+            'Cur. Ready: {current-jobs-ready}',
             'Cur. Buried: {current-jobs-buried}',
-            'Cur. Resv\'d: {current-jobs-reserved}',
+            'Up: {uptime}',
+            # Row 3
+            'Cur. Tubes: {current-tubes}',
+            'Total Jobs: {total-jobs}',
+            'PID: {pid}',
             )]
 
         summary_lines = [
-            summary_items[0:3],
-            summary_items[3:6],
-            summary_items[6:],
+            summary_items[0:3],  # Row 1
+            summary_items[3:6],  # Row 2
+            summary_items[6:],   # Row 3
             ]
 
         summarywidth = self.width / max(len(i) for i in summary_lines)
@@ -157,62 +190,54 @@ class BeanstalkTopUI(object):
 
         self.win.addstr(' ' * self.width)
 
-        colwidth = self.width / len(titles) + 1
+        return len(summary_lines)
 
-        titlelen = 0
-        for i in range(len(titles)):
-            attr = curses.A_REVERSE
 
-            if i is 0:
-                title = (' ' + titles[i]).ljust(colwidth - 1)
-            else:
-                title = (titles[i] + ' ').rjust(colwidth - 1)
+    def display_titles(self, colwidth):
+        titlebar = ''.join([(' ' + self.titles[0]).ljust(colwidth - 1)] +
+                           [(title + ' ').rjust(colwidth - 1)
+                            for title in self.titles[1:]])
 
-            titlelen += len(title)
-            self.win.addstr(title, attr)
+        self.win.addstr(titlebar.ljust(self.width - 1),
+                        curses.A_REVERSE|curses.A_STANDOUT)
 
-        self.win.addstr(' ' * (self.width - titlelen), curses.A_REVERSE)
+        return 1
 
-        columns = (
-            'name',
-            'current-jobs-ready',
-            'current-jobs-urgent',
-            'current-jobs-reserved',
-            'current-jobs-delayed',
-            'current-jobs-buried',
-            )
 
-        max_lines = self.height - (len(summary_lines) + 1)
+    def display_footer(self, colwidth):
+        bottomwin = self.win.subwin(self.height - 1, 0)
+        helpmsg = ' To quit, press "q".' # For help, press "h"'
+        bottomwin.addstr(helpmsg.ljust(self.width - 1), curses.A_REVERSE)
+        return 1
 
-        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK)
 
-        for i in range(max_lines):
-            try:
-                line = lines[i]
-            except IndexError:
-                break
-            row = ''
-            jobs = 0
-            for c, column in enumerate(columns):
-                try:
-                    if c is 0:
-                        row += (' ' + str(line[column])).ljust(colwidth - 1)
-                    else:
-                        row += (str(line[column]) + ' ').rjust(colwidth - 1)
-                        jobs += int(line[column])
-                except curses.error:
-                    pass
-            try:
-                if jobs:
-                    self.win.addstr(row.ljust(self.width), curses.color_pair(2)|curses.A_BOLD)
+    def display_line(self, line, colwidth):
+        row = ''.join([' ' + (str(line[self.columns[0]])).ljust(colwidth - 2)] +
+                      [(str(line[column]) + ' ').rjust(colwidth - 1)
+                       for column in self.columns[1:]])
+
+        has_jobs = sum([int(line[column])
+                        for column in self.columns[1:]
+                        if isinstance(line[column], int)
+                        or line[column].isdigit()])
+
+        has_burried = int(line.get('current-jobs-burried', 0))
+
+        try:
+            if curses.has_colors():
+                if has_burried:
+                    attrs = curses.color_pair(3)
+                elif has_jobs:
+                    attrs = curses.color_pair(1)
                 else:
-                    self.win.addstr(row.ljust(self.width), curses.color_pair(1))
-            except curses.error:
-                pass
+                    attrs = curses.color_pair(2) | curses.A_DIM
+            else:
+                attrs = None
 
+            self.win.addstr(' ' + row.ljust(self.width), attrs)
+        except curses.error:
+            pass
 
-        self.win.refresh()
 
 
     def get_overview_data(self):
@@ -314,12 +339,14 @@ class BeanstalkTopUI(object):
             if key not in self._tube_sort_keys:
                 key = 'name'
 
-            lines = [self.connection.stats_tube(tube) for tube in self.connection.tubes()]
+            lines = [self.connection.stats_tube(tube)
+                     for tube
+                     in self.connection.tubes()]
 
             if sort == self.DESCENDING:
-                return reversed(sorted(lines, key=lambda x: x[key]))
-            else:
-                return sorted(lines, key=lambda x: x[key])
+                return reversed(sorted(lines, key=itemgetter(key)))
+
+            return sorted(lines, key=itemgetter(key))
 
         except (TypeError, beanstalkc.SocketError, beanstalkc.CommandFailed):
             return [self.default_row]
@@ -358,8 +385,8 @@ def main():
     if args:
         parser.error('Unexpected arguments: ' + ' '.join(args))
 
-    main_loop = lambda: run_beanstalktop(options)
-    main_loop()
+    main_loop = run_beanstalktop(options)
+    curses.wrapper(main_loop)
 
 
 if __name__ == '__main__':
