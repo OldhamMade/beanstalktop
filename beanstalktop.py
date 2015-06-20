@@ -135,7 +135,7 @@ class BeanstalkTopUI(object):
             'Cur. Ready: {current-jobs-ready}',
             'Cur. Urgent: {current-jobs-urgent}',
             'Cur. Buried: {current-jobs-buried}',
-            'Cur. Resv\'d: {current-jobs-reserved}',
+            'Cur. Reserved: {current-jobs-reserved}',
             )]
 
         summary_lines = [
