@@ -144,7 +144,7 @@ class BeanstalkTopUI(object):
             summary_items[6:],
             ]
 
-        summarywidth = self.width / max(len(i) for i in summary_lines)
+        summarywidth = self.width // max(len(i) for i in summary_lines)
 
         for item in summary_lines:
             line = ''.join(s.ljust(summarywidth) for s in item)
@@ -152,7 +152,7 @@ class BeanstalkTopUI(object):
 
         self.win.addstr(' ' * self.width)
 
-        colwidth = self.width / len(titles) + 1
+        colwidth = self.width // len(titles) + 1
 
         titlelen = 0
         for i in range(len(titles)):
