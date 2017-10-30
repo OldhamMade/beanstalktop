@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 import os
 
 with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as file_readme:
@@ -15,8 +15,7 @@ setup(name="beanstalktop",
               'beanstalktop = beanstalktop:main',
               ],
           },
-      scripts=['beanstalktop.py', ],
-      packages=find_packages(),
+      py_modules=['beanstalktop'],
       install_requires=[
           'beanstalkc',
           'PyYAML',
